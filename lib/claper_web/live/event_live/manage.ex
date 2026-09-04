@@ -1049,6 +1049,11 @@ defmodule ClaperWeb.EventLive.Manage do
              reset: true
            )}
 
+        # Results come from the current interaction, which every interaction
+        # broadcast already refreshes. Nothing to re-stream.
+        "results" ->
+          {:results, socket}
+
         _ ->
           {:posts,
            stream(socket, :posts, list_all_posts(socket, socket.assigns.event.uuid), reset: true)}
@@ -1321,9 +1326,58 @@ defmodule ClaperWeb.EventLive.Manage do
     with {:ok, interactions} <-
            Claper.Interactions.get_interactions_at_position(event, position, broadcast) do
       active = interactions |> Enum.find(& &1.enabled)
-      socket |> assign(:interactions, interactions) |> assign(:current_interaction, active)
+
+      socket
+      |> assign(:interactions, interactions)
+      |> assign(:current_interaction, active)
+      |> assign(:interaction_results, interaction_results(active))
     end
   end
+
+  # Tallies for the live interaction, so the presenter can read answers without
+  # leaving the manage screen. Rebuilt here rather than in the template because
+  # the quiz figures are database reads, and this runs on every :poll_updated
+  # and :quiz_updated broadcast already.
+  defp interaction_results(%Claper.Polls.Poll{} = poll) do
+    poll = Claper.Polls.set_percentages(poll)
+    total = poll.poll_opts |> Enum.map(& &1.vote_count) |> Enum.sum()
+
+    %{
+      type: :poll,
+      title: poll.title,
+      response_count: total,
+      options:
+        Enum.map(poll.poll_opts, fn opt ->
+          %{label: opt.content, count: opt.vote_count, percentage: opt.percentage}
+        end)
+    }
+  end
+
+  defp interaction_results(%Claper.Quizzes.Quiz{} = quiz) do
+    %{
+      type: :quiz,
+      title: quiz.title,
+      response_count: Claper.Quizzes.get_submission_count(quiz.id),
+      average_score: Claper.Quizzes.calculate_average_score(quiz.id),
+      question_count: length(quiz.quiz_questions),
+      questions:
+        Enum.map(quiz.quiz_questions, fn question ->
+          %{
+            label: question.content,
+            options:
+              Enum.map(question.quiz_question_opts, fn opt ->
+                %{label: opt.content, count: opt.response_count, correct: opt.is_correct}
+              end)
+          }
+        end)
+    }
+  end
+
+  defp interaction_results(%Claper.Forms.Form{} = form) do
+    %{type: :form, title: form.title}
+  end
+
+  defp interaction_results(_), do: nil
 
   defp list_pinned_posts(_socket, event_id) do
     Claper.Posts.list_pinned_posts(event_id, [:event, :reactions])

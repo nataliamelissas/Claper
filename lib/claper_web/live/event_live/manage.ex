@@ -148,7 +148,7 @@ defmodule ClaperWeb.EventLive.Manage do
       |> stream_insert(:posts, post, at: 0)
       |> update(:post_count, fn post_count -> post_count + 1 end)
 
-    case ClaperWeb.Helpers.body_without_links(post.body) =~ "?" do
+    case Claper.Posts.question?(post.body) do
       true ->
         {:noreply,
          socket
@@ -170,7 +170,9 @@ defmodule ClaperWeb.EventLive.Manage do
        sorted_questions =
          list_all_questions(socket, socket.assigns.event.uuid, socket.assigns.sort_questions_by)
 
-       stream(socket, :questions, sorted_questions, reset: true)
+       socket
+       |> stream(:questions, sorted_questions, reset: true)
+       |> assign(:question_count, length(sorted_questions))
      end)
      |> stream_insert(:pinned_posts, updated_post)}
   end
@@ -186,7 +188,7 @@ defmodule ClaperWeb.EventLive.Manage do
       end)
       |> update(:post_count, fn post_count -> post_count - 1 end)
 
-    case ClaperWeb.Helpers.body_without_links(deleted_post.body) =~ "?" do
+    case Claper.Posts.question?(deleted_post.body) do
       true ->
         {:noreply,
          socket
@@ -204,7 +206,7 @@ defmodule ClaperWeb.EventLive.Manage do
       socket
       |> stream_insert(:posts, post)
       |> stream_insert(:pinned_posts, post, at: 0)
-      |> stream_insert(:questions, post)
+      |> refresh_question(post)
       |> assign(:pinned_post_count, socket.assigns.pinned_post_count + 1)
 
     {:noreply, updated_socket}
@@ -216,7 +218,7 @@ defmodule ClaperWeb.EventLive.Manage do
       socket
       |> stream_insert(:posts, post)
       |> stream_delete(:pinned_posts, post)
-      |> stream_insert(:questions, post)
+      |> refresh_question(post)
       |> assign(:pinned_post_count, socket.assigns.pinned_post_count - 1)
 
     {:noreply, updated_socket}
@@ -1352,6 +1354,16 @@ defmodule ClaperWeb.EventLive.Manage do
     |> Enum.reverse()
   end
 
+  # Pinning does not change whether a post is a question, so the count stays put.
+  # The re-insert only refreshes the pin indicator on a question already streamed.
+  defp refresh_question(socket, post) do
+    if Claper.Posts.question?(post.body) do
+      stream_insert(socket, :questions, post)
+    else
+      socket
+    end
+  end
+
   defp list_all_questions(_socket, event_id, sort \\ "date") do
     sort_atom =
       case sort do
@@ -1361,7 +1373,6 @@ defmodule ClaperWeb.EventLive.Manage do
 
     questions =
       Claper.Posts.list_questions(event_id, [:event, :reactions], sort_atom)
-      |> Enum.filter(&(ClaperWeb.Helpers.body_without_links(&1.body) =~ "?"))
 
     if sort_atom == :date, do: Enum.reverse(questions), else: questions
   end

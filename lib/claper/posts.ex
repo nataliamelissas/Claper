@@ -24,6 +24,39 @@ defmodule Claper.Posts do
     |> Repo.preload(preload)
   end
 
+  @url_regex ~r/(https?:\/\/[^\s]+)/
+
+  @doc """
+  Strips URLs out of a post body.
+
+  Lives in the context rather than the web layer because question detection
+  depends on it: a link's query string must not make a message look like a
+  question.
+  """
+  def body_without_links(body) when is_binary(body) do
+    String.replace(body, @url_regex, "")
+  end
+
+  @doc """
+  Whether a post body reads as a question.
+
+  Claper detects questions from the discussion instead of collecting them
+  through a separate input, so a body counts as a question when it contains a
+  question mark that is not part of a link.
+
+  ## Examples
+
+      iex> Claper.Posts.question?("why?")
+      true
+
+      iex> Claper.Posts.question?("see https://example.com/a?b=1")
+      false
+
+  """
+  def question?(body) when is_binary(body) do
+    body |> body_without_links() |> String.contains?("?")
+  end
+
   @doc """
   Get event posts which are questions
 
@@ -43,6 +76,7 @@ defmodule Claper.Posts do
 
     query
     |> Repo.all()
+    |> Enum.filter(&question?(&1.body))
     |> Repo.preload(preload)
   end
 

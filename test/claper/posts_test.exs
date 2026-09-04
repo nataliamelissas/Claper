@@ -75,6 +75,37 @@ defmodule Claper.PostsTest do
     end
   end
 
+  describe "questions" do
+    test "question?/1 recognises a question mark in the body" do
+      assert Posts.question?("why?")
+      refute Posts.question?("hello!!")
+    end
+
+    test "question?/1 ignores a question mark inside a link" do
+      refute Posts.question?("see https://example.com/a?b=1")
+      assert Posts.question?("is this it? https://example.com/a?b=1")
+    end
+
+    test "list_questions/3 returns only bodies that read as questions" do
+      event = event_fixture()
+      question = post_fixture(%{event: event, body: "why?"})
+      post_fixture(%{event: event, body: "hello!!"})
+      post_fixture(%{event: event, body: "see https://example.com/a?b=1"})
+
+      assert [%Post{id: id}] = Posts.list_questions(event.uuid)
+      assert id == question.id
+    end
+
+    test "list_questions/3 sorts by likes when asked" do
+      event = event_fixture()
+      quiet = post_fixture(%{event: event, body: "quiet question?", like_count: 1})
+      popular = post_fixture(%{event: event, body: "popular question?", like_count: 9})
+
+      assert [popular.id, quiet.id] ==
+               event.uuid |> Posts.list_questions([], :likes) |> Enum.map(& &1.id)
+    end
+  end
+
   describe "reactions" do
     alias Claper.Posts.Reaction
 

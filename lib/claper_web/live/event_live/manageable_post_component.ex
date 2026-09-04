@@ -169,7 +169,7 @@ defmodule ClaperWeb.EventLive.ManageablePostComponent do
         </div>
         
     <!-- Message bubble with tail -->
-        <% is_question = ClaperWeb.Helpers.body_without_links(@post.body) =~ "?" %>
+        <% is_question = Claper.Posts.question?(@post.body) %>
         <% bubble_bg =
           cond do
             @post.pinned && is_question ->

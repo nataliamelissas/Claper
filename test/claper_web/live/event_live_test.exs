@@ -2,7 +2,7 @@ defmodule ClaperWeb.EventLiveTest do
   use ClaperWeb.ConnCase
 
   import Phoenix.LiveViewTest
-  import Claper.{FormsFixtures, PollsFixtures, PresentationsFixtures}
+  import Claper.{FormsFixtures, PollsFixtures, PostsFixtures, PresentationsFixtures}
 
   @update_attrs %{name: "some updated name"}
 
@@ -232,6 +232,50 @@ defmodule ClaperWeb.EventLiveTest do
       |> render_click()
 
       assert render(manage_live) =~ "2 / 2"
+    end
+
+    test "pinning a plain message keeps it out of the questions tab", %{
+      conn: conn,
+      presentation_file: presentation_file
+    } do
+      event = presentation_file.event
+      post_fixture(%{event: event, body: "why?"})
+      plain = post_fixture(%{event: event, body: "hello!!"}, [:event])
+
+      {:ok, manage_live, _html} = live(conn, ~p"/e/#{event.code}/manage")
+
+      manage_live
+      |> element(~s(button[phx-value-tab="questions"]))
+      |> render_click()
+
+      assert render(manage_live) =~ "why?"
+      refute render(manage_live) =~ "hello!!"
+
+      Claper.Posts.toggle_pin_post(plain)
+
+      refute render(manage_live) =~ "hello!!"
+    end
+
+    test "editing a message into a question updates the questions count", %{
+      conn: conn,
+      presentation_file: presentation_file
+    } do
+      event = presentation_file.event
+      plain = post_fixture(%{event: event, body: "hello!!"}, [:event])
+
+      {:ok, manage_live, _html} = live(conn, ~p"/e/#{event.code}/manage")
+
+      manage_live
+      |> element(~s(button[phx-value-tab="questions"]))
+      |> render_click()
+
+      assert render(manage_live) =~ "Questions will appear here."
+
+      Claper.Posts.update_post(plain, %{body: "why now?"})
+
+      html = render(manage_live)
+      refute html =~ "Questions will appear here."
+      assert html =~ "why now?"
     end
 
     test "shows more interactions when the panel is taller", %{

@@ -333,6 +333,80 @@ defmodule ClaperWeb.EventLive.InteractionComponentsTest do
     assert Floki.attribute(document, close_selector, "aria-label") == ["Close"]
   end
 
+  test "results tab tallies the live poll" do
+    document =
+      audience_responses(%{
+        type: :poll,
+        title: "Which topic should be next?",
+        response_count: 3,
+        options: [
+          %{label: "LiveView", count: 2, percentage: "67"},
+          %{label: "Ecto", count: 1, percentage: "33"}
+        ]
+      })
+
+    text = document |> Floki.text() |> String.replace(~r/\s+/, " ")
+
+    assert text =~ "Which topic should be next?"
+    assert text =~ "3 votes"
+    assert text =~ "LiveView"
+    assert text =~ "2 (67%)"
+    assert text =~ "1 (33%)"
+  end
+
+  test "results tab tallies the live quiz" do
+    document =
+      audience_responses(%{
+        type: :quiz,
+        title: "Recursion check",
+        response_count: 4,
+        average_score: 1.5,
+        question_count: 2,
+        questions: [
+          %{
+            label: "What is a base case?",
+            options: [
+              %{label: "The stopping condition", count: 3, correct: true},
+              %{label: "The first call", count: 1, correct: false}
+            ]
+          }
+        ]
+      })
+
+    text = document |> Floki.text() |> String.replace(~r/\s+/, " ")
+
+    assert text =~ "Recursion check"
+    assert text =~ "4 submissions"
+    assert text =~ "Average score 1.5/2"
+    assert text =~ "The stopping condition"
+  end
+
+  test "results tab sends the presenter to the stats page when nothing is live" do
+    document = audience_responses(nil)
+
+    assert document |> Floki.text() =~ "Enable a poll or a quiz to see live answers here."
+
+    assert document
+           |> Floki.attribute(~s(a[target="_blank"]), "href")
+           |> List.first() =~ "/stats"
+  end
+
+  defp audience_responses(interaction_results) do
+    ClaperWeb.EventLive.ManageAudienceResponsesComponent
+    |> Function.capture(:render, 1)
+    |> render_component(
+      list_tab: :results,
+      post_count: 0,
+      question_count: 0,
+      pinned_post_count: 0,
+      form_submit_count: 0,
+      interaction_results: interaction_results,
+      streams: %{},
+      event: %{uuid: Ecto.UUID.generate()}
+    )
+    |> Floki.parse_document!()
+  end
+
   defp assert_submitted_button(document, text) do
     assert "w-full" in classes(document, "button[data-submitted]")
     assert Floki.attribute(document, "button[data-submitted]", "disabled") == ["disabled"]

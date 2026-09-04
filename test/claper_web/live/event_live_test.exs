@@ -2,7 +2,7 @@ defmodule ClaperWeb.EventLiveTest do
   use ClaperWeb.ConnCase
 
   import Phoenix.LiveViewTest
-  import Claper.{FormsFixtures, PostsFixtures, PresentationsFixtures}
+  import Claper.{FormsFixtures, PollsFixtures, PostsFixtures, PresentationsFixtures}
 
   @update_attrs %{name: "some updated name"}
 
@@ -193,6 +193,36 @@ defmodule ClaperWeb.EventLiveTest do
 
   describe "Manage" do
     setup [:register_and_log_in_user, :create_event]
+
+    test "surfaces live poll results without leaving the manage screen", %{
+      conn: conn,
+      presentation_file: presentation_file
+    } do
+      event = presentation_file.event
+
+      poll =
+        poll_fixture(%{
+          presentation_file_id: presentation_file.id,
+          position: 0,
+          title: "Which topic should be next?"
+        })
+
+      {:ok, manage_live, html} = live(conn, ~p"/e/#{event.code}/manage")
+
+      assert html =~ ~p"/events/#{event.uuid}/stats"
+
+      manage_live
+      |> element(~s(button[phx-value-tab="results"]))
+      |> render_click()
+
+      assert render(manage_live) =~ "Which topic should be next?"
+
+      [poll_opt | _] = poll.poll_opts
+      Claper.Polls.vote("attendee", event.uuid, [poll_opt], poll.id)
+
+      text = render(manage_live) |> Floki.parse_document!() |> Floki.text()
+      assert text =~ "1 (100%)"
+    end
 
     test "pinning a plain message keeps it out of the questions tab", %{
       conn: conn,

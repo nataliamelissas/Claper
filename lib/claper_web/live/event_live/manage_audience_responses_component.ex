@@ -2,6 +2,7 @@ defmodule ClaperWeb.EventLive.ManageAudienceResponsesComponent do
   @moduledoc false
   use Phoenix.Component
   use Gettext, backend: ClaperWeb.Gettext
+  use ClaperWeb, :verified_routes
 
   @avatars ~w(🦊 🐙 🦉 🐸 🐼 🦋 🐬 🦈 🐢 🦎 🐝 🦩 🐧 🦦 🐨 🦁 🐯 🐻 🐰 🐮
     🐷 🐵 🦄 🐺 🦇 🐳 🐠 🦑 🦞 🦀 🐡 🐞 🦗 🕷 🦂 🐍 🦕 🦖 🦚 🦜
@@ -68,6 +69,15 @@ defmodule ClaperWeb.EventLive.ManageAudienceResponsesComponent do
             class={"px-3 py-1.5 rounded-full text-sm font-medium transition-colors #{if @list_tab == :forms, do: "bg-secondary-500 text-white", else: "text-gray-600 hover:bg-gray-100"}"}
           >
             {gettext("Forms")} ({@form_submit_count})
+          </button>
+        </li>
+        <li>
+          <button
+            phx-click="list-tab"
+            phx-value-tab="results"
+            class={"px-3 py-1.5 rounded-full text-sm font-medium transition-colors #{if @list_tab == :results, do: "bg-secondary-500 text-white", else: "text-gray-600 hover:bg-gray-100"}"}
+          >
+            {gettext("Results")} ({response_count(@interaction_results)})
           </button>
         </li>
       </ul>
@@ -309,10 +319,118 @@ defmodule ClaperWeb.EventLive.ManageAudienceResponsesComponent do
             </div>
           </div>
         <% end %>
+
+        <%= if @list_tab == :results do %>
+          <div
+            :if={is_nil(@interaction_results)}
+            class="h-full flex flex-col items-center justify-center text-gray-400 py-8 px-4 text-center"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-12 w-12 mb-3"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+              />
+            </svg>
+            <p class="text-sm">
+              {gettext("Enable a poll or a quiz to see live answers here.")}
+            </p>
+            <a
+              href={~p"/events/#{@event.uuid}/stats"}
+              target="_blank"
+              class="mt-2 text-sm text-primary-500 hover:underline"
+            >
+              {gettext("See all results")}
+            </a>
+          </div>
+
+          <div :if={@interaction_results} class="p-2 space-y-3">
+            <div class="flex items-baseline justify-between gap-2">
+              <p class="min-w-0 truncate text-sm font-bold text-secondary-500">
+                {@interaction_results.title}
+              </p>
+              <a
+                href={~p"/events/#{@event.uuid}/stats"}
+                target="_blank"
+                class="shrink-0 text-xs text-primary-500 hover:underline"
+              >
+                {gettext("See all results")}
+              </a>
+            </div>
+
+            <%= case @interaction_results.type do %>
+              <% :poll -> %>
+                <p class="text-xs text-gray-500">
+                  {ngettext(
+                    "%{count} vote",
+                    "%{count} votes",
+                    @interaction_results.response_count
+                  )}
+                </p>
+                <dl class="divide-y divide-base-200 rounded-xl border border-base-200 bg-base-100 px-3 py-2 shadow-sm">
+                  <div
+                    :for={option <- @interaction_results.options}
+                    class="flex items-baseline justify-between gap-3 py-1.5 first:pt-0 last:pb-0"
+                  >
+                    <dt class="min-w-0 break-words text-xs leading-4 text-base-content">
+                      {option.label}
+                    </dt>
+                    <dd class="shrink-0 text-xs font-semibold tabular-nums text-base-content/60">
+                      {option.count} ({option.percentage}%)
+                    </dd>
+                  </div>
+                </dl>
+              <% :quiz -> %>
+                <p class="text-xs text-gray-500">
+                  {ngettext(
+                    "%{count} submission",
+                    "%{count} submissions",
+                    @interaction_results.response_count
+                  )} · {gettext("Average score")} {@interaction_results.average_score}/{@interaction_results.question_count}
+                </p>
+                <div
+                  :for={question <- @interaction_results.questions}
+                  class="rounded-xl border border-base-200 bg-base-100 px-3 py-2 shadow-sm"
+                >
+                  <p class="mb-1 break-words text-[11px] font-semibold leading-4 text-base-content/60">
+                    {question.label}
+                  </p>
+                  <dl class="divide-y divide-base-200">
+                    <div
+                      :for={option <- question.options}
+                      class="flex items-baseline justify-between gap-3 py-1.5 first:pt-0 last:pb-0"
+                    >
+                      <dt class="min-w-0 break-words text-xs leading-4 text-base-content">
+                        {option.label}
+                        <span :if={option.correct} class="text-success">✓</span>
+                      </dt>
+                      <dd class="shrink-0 text-xs font-semibold tabular-nums text-base-content/60">
+                        {option.count}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+              <% :form -> %>
+                <p class="text-sm text-gray-400">
+                  {gettext("Form submissions appear in the Forms tab.")}
+                </p>
+            <% end %>
+          </div>
+        <% end %>
       </div>
     </div>
     """
   end
+
+  defp response_count(%{response_count: count}), do: count
+  defp response_count(_), do: 0
 
   defp avatar_identifier(record) do
     "#{record.attendee_identifier || record.user_id || "default"}"

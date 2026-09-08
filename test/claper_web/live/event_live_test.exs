@@ -194,6 +194,60 @@ defmodule ClaperWeb.EventLiveTest do
   describe "Manage" do
     setup [:register_and_log_in_user, :create_event]
 
+    test "explains that enabling an interaction turns the others off", %{
+      conn: conn,
+      presentation_file: presentation_file
+    } do
+      poll_fixture(%{
+        presentation_file_id: presentation_file.id,
+        position: 0,
+        title: "Warm-up poll",
+        enabled: true
+      })
+
+      poll_fixture(%{
+        presentation_file_id: presentation_file.id,
+        position: 0,
+        title: "Follow-up poll",
+        enabled: false
+      })
+
+      {:ok, manage_live, html} = live(conn, ~p"/e/#{presentation_file.event.code}/manage")
+
+      assert has_element?(manage_live, "#interaction-exclusivity-hint")
+
+      tips =
+        html
+        |> Floki.parse_document!()
+        |> Floki.attribute("#interaction-drag-list .tooltip", "data-tip")
+
+      assert "Goes live and turns off the other interactions on this slide." in tips
+      assert "Live for the audience. Turn it off to hide it." in tips
+    end
+
+    test "stays quiet about exclusivity when the slide holds one interaction", %{
+      conn: conn,
+      presentation_file: presentation_file
+    } do
+      poll_fixture(%{
+        presentation_file_id: presentation_file.id,
+        position: 0,
+        title: "Warm-up poll",
+        enabled: false
+      })
+
+      {:ok, manage_live, html} = live(conn, ~p"/e/#{presentation_file.event.code}/manage")
+
+      refute has_element?(manage_live, "#interaction-exclusivity-hint")
+
+      tips =
+        html
+        |> Floki.parse_document!()
+        |> Floki.attribute("#interaction-drag-list .tooltip", "data-tip")
+
+      assert "Show this to the audience." in tips
+    end
+
     test "keeps interaction pagination reachable on short screens", %{
       conn: conn,
       presentation_file: presentation_file

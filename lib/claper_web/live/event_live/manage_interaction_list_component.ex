@@ -60,7 +60,10 @@ defmodule ClaperWeb.EventLive.ManageInteractionListComponent do
     assigns =
       assign(assigns,
         paginated: paginated_interactions(assigns.interactions, assigns.page, assigns.per_page),
-        total_pages: max(1, ceil(length(assigns.interactions) / assigns.per_page))
+        total_pages: max(1, ceil(length(assigns.interactions) / assigns.per_page)),
+        # Enabling an interaction disables the others on the same slide, so the
+        # trade-off is only worth explaining when there is more than one.
+        exclusive?: length(assigns.interactions) > 1
       )
 
     ~H"""
@@ -384,6 +387,10 @@ defmodule ClaperWeb.EventLive.ManageInteractionListComponent do
         </p>
       </div>
 
+      <p :if={@exclusive?} id="interaction-exclusivity-hint" class="px-1 text-xs text-gray-500">
+        {gettext("Only one interaction can be live at a time on a slide.")}
+      </p>
+
       <%= for interaction <- @paginated do %>
         <div
           draggable="true"
@@ -498,13 +505,16 @@ defmodule ClaperWeb.EventLive.ManageInteractionListComponent do
             </svg>
           </.link>
 
-          <input
-            type="checkbox"
-            class="toggle toggle-sm shrink-0 bg-gray-200 border-gray-300 [--tglbg:white] checked:bg-white checked:border-accent checked:[--tglbg:var(--color-accent)]"
-            checked={interaction.enabled}
-            phx-click={toggle_event(interaction)}
-            phx-value-id={interaction.id}
-          />
+          <div class="tooltip tooltip-left shrink-0" data-tip={toggle_tip(interaction, @exclusive?)}>
+            <input
+              type="checkbox"
+              class="toggle toggle-sm bg-gray-200 border-gray-300 [--tglbg:white] checked:bg-white checked:border-accent checked:[--tglbg:var(--color-accent)]"
+              checked={interaction.enabled}
+              aria-label={toggle_tip(interaction, @exclusive?)}
+              phx-click={toggle_event(interaction)}
+              phx-value-id={interaction.id}
+            />
+          </div>
         </div>
       <% end %>
 
@@ -576,6 +586,14 @@ defmodule ClaperWeb.EventLive.ManageInteractionListComponent do
     do: ~p"/e/#{event_code}/manage/edit/quiz/#{id}"
 
   defp edit_path(event_code, _), do: ~p"/e/#{event_code}/manage"
+
+  defp toggle_tip(%{enabled: true}, _exclusive?),
+    do: gettext("Live for the audience. Turn it off to hide it.")
+
+  defp toggle_tip(_interaction, true),
+    do: gettext("Goes live and turns off the other interactions on this slide.")
+
+  defp toggle_tip(_interaction, _exclusive?), do: gettext("Show this to the audience.")
 
   defp toggle_event(%Claper.Polls.Poll{enabled: true}), do: "poll-set-inactive"
   defp toggle_event(%Claper.Polls.Poll{enabled: false}), do: "poll-set-active"
